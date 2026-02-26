@@ -7,9 +7,20 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 class MockRecasterPlatform
     with MockPlatformInterfaceMixin
     implements RecasterPlatform {
-
   @override
   Future<String?> getPlatformVersion() => Future.value('42');
+
+  @override
+  Future<bool> isRecording() => Future.value(true);
+
+  @override
+  Future<void> startRecording(
+      {required String outputPath,
+      int fps = 30,
+      int resolutionDivisor = 1}) async {}
+
+  @override
+  Future<String?> stopRecording() => Future.value('/tmp/recording.mp4');
 }
 
 void main() {
@@ -25,5 +36,21 @@ void main() {
     RecasterPlatform.instance = fakePlatform;
 
     expect(await recasterPlugin.getPlatformVersion(), '42');
+  });
+
+  test('isRecording', () async {
+    Recaster recasterPlugin = Recaster();
+    MockRecasterPlatform fakePlatform = MockRecasterPlatform();
+    RecasterPlatform.instance = fakePlatform;
+
+    expect(await recasterPlugin.isRecording(), true);
+  });
+
+  test('stopRecording', () async {
+    Recaster recasterPlugin = Recaster();
+    MockRecasterPlatform fakePlatform = MockRecasterPlatform();
+    RecasterPlatform.instance = fakePlatform;
+
+    expect(await recasterPlugin.stopRecording(), '/tmp/recording.mp4');
   });
 }
