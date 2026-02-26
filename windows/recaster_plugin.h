@@ -39,10 +39,14 @@ class RecasterPlugin : public flutter::Plugin {
   bool StartRecording(const std::string& output_path,
                       int fps,
                       int resolution_divisor,
+                      std::string* error_code,
                       std::string* error_message);
   bool StopRecording(std::string* saved_path, std::string* error_message);
   bool CaptureWindowFrame(FrameData* frame);
   void CaptureLoop();
+  bool EnsureOutputPathWritable(const std::string& output_path,
+                                std::string* error_code,
+                                std::string* error_message);
   bool WriteAviFile(const std::string& output_path,
                     const std::vector<FrameData>& frames,
                     int fps,
