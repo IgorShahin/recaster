@@ -1,10 +1,12 @@
-# recaster
+<p align="center">
+  <img src="docs/assets/logo.png" width="520" alt="Recaster" />
+</p>
 
-Desktop Flutter plugin for recording the **current app window** with native platform backends.
+<h2 align="center">Desktop App-Window Recorder for Flutter</h2>
 
-- No external recorder process
-- No `ffmpeg` dependency
-- Unified Dart API for macOS, Windows, Linux
+<p align="center">
+  Native screen recording plugin for macOS, Windows, and Linux
+</p>
 
 ## Features
 
@@ -85,41 +87,3 @@ await recaster.startRecording(
 final recording = await recaster.isRecording();
 final savedPath = await recaster.stopRecording();
 ```
-
-## Important Notes
-
-- Use `.mp4` on macOS and `.avi` on Windows/Linux.
-- Windows/Linux use uncompressed AVI output; files can be large.
-- `stopRecording()` returns saved file path on success.
-- Calling `startRecording()` while already recording returns a platform error.
-
-## Permissions
-
-### macOS
-
-Window/screen capture requires system permission.
-
-1. Open `System Settings` -> `Privacy & Security` -> `Screen Recording`
-2. Enable your app
-3. Restart the app if required by macOS
-
-## Example App
-
-See the plugin example with UI controls for:
-
-- output path
-- FPS
-- resolution divisor
-- start/stop/status buttons
-
-Path: `example/lib/main.dart`
-
-## Current Limitations
-
-- Recording target is the app window, not arbitrary desktop/window selection.
-- No audio capture in current implementation.
-- No pause/resume yet.
-
-## License
-
-See [LICENSE](LICENSE).
