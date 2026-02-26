@@ -24,7 +24,7 @@
 
 ```yaml
 dependencies:
-  recaster: ^0.1.0
+  recaster: ^0.1.1
 ```
 
 ### 2. Install
