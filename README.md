@@ -1,7 +1,7 @@
 <p align="center">
   <img src="doc/assets/logo.png" width="520" alt="Recaster" />
 </p>
-<h2 align="center">Desktop App-Window Recorder for Flutter</h2>
+<h2 align="center">Desktop Flutter View Recorder</h2>
 
 ## Features
 
@@ -14,9 +14,9 @@
 
 | Platform | Backend | Output |
 |---|---|---|
-| macOS | AVFoundation + app window capture | `.mp4` |
-| Windows | GDI window capture + internal AVI writer | `.avi` |
-| Linux | GTK/GDK window capture + internal AVI writer | `.avi` |
+| macOS | NSView (Flutter view) frame capture + AVAssetWriter (H.264) | `.mp4` |
+| Windows | GDI capture of Flutter native view handle + internal AVI writer | `.avi` |
+| Linux | GTK/GDK capture of `FlView` widget (fallback: root window) + internal AVI writer | `.avi` |
 
 ## Installation
 
@@ -27,7 +27,7 @@ dependencies:
   recaster:
     git:
       url: git@github.com:IgorShahin/recaster.git
-      ref: dev
+      ref: main
 ```
 
 or (for local development):
@@ -85,22 +85,33 @@ final savedPath = await recaster.stopRecording();
 
 ## Important Notes
 
-- Recording target is Flutter view content.
-- Use `.mp4` on macOS and `.avi` on Windows/Linux.
-- On Windows/Linux AVI is uncompressed and can be large.
+- Recording target is Flutter view content on all desktop platforms.
 - `startRecording` validates output path before capture starts.
+- Always call `stopRecording()` to finalize and flush the output file.
 
-## Permissions
+## Platform Notes
 
 ### macOS
 
-- First capture may require Screen Recording permission in:
-  - `System Settings -> Privacy & Security -> Screen Recording`
-- If app sandbox is enabled, writing to arbitrary paths may be restricted.
+- Capture source: Flutter view via `NSView` frame capture.
+- Output format: `.mp4` (H.264, via `AVAssetWriter`).
+- If app sandbox is enabled, writing to arbitrary paths may be restricted by entitlements.
+
+### Windows
+
+- Capture source: Flutter native view handle via GDI.
+- Output format: `.avi` (internal AVI writer).
+- AVI output is uncompressed and can be large.
+
+### Linux
+
+- Capture source: `FlView` widget via GTK/GDK (`root window` fallback).
+- Output format: `.avi` (internal AVI writer).
+- AVI output is uncompressed and can be large.
 
 ## Path Validation Errors
 
-`startRecording` can return clear platform errors for invalid report paths:
+`startRecording` can return clear platform errors for invalid output paths:
 
 - `invalid_output_path`
 - `directory_create_failed`
