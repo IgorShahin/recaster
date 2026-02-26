@@ -24,7 +24,7 @@
 
 ```yaml
 dependencies:
-  recaster: ^0.0.1
+  recaster: ^0.1.0
 ```
 
 ### 2. Install
@@ -70,7 +70,7 @@ import 'package:recaster/recaster.dart';
 final recaster = Recaster();
 
 await recaster.startRecording(
-  outputPath: '/tmp/recording.mp4', // use .avi on Windows/Linux
+  outputPath: '/tmp/recording.mp4', // use .avi on Linux
   fps: 30,
   resolutionDivisor: 2,
 );
