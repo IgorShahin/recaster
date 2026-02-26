@@ -17,7 +17,7 @@ FLUTTER_PLUGIN_EXPORT void RecasterPluginCApiRegisterWithRegistrar(
     FlutterDesktopPluginRegistrarRef registrar);
 
 #if defined(__cplusplus)
-}  // extern "C"
+}
 #endif
 
-#endif  // FLUTTER_PLUGIN_RECASTER_PLUGIN_C_API_H_
+#endif
