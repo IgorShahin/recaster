@@ -18,31 +18,27 @@
 | Windows | GDI capture of Flutter native view handle + internal AVI writer | `.avi` |
 | Linux | GTK/GDK capture of `FlView` widget (fallback: root window) + internal AVI writer | `.avi` |
 
-## Installation
+## Get Started
 
-Add the plugin to `pubspec.yaml`:
-
-```yaml
-dependencies:
-  recaster:
-    git:
-      url: git@github.com:IgorShahin/recaster.git
-      ref: main
-```
-
-or (for local development):
+### 1. Add dependency
 
 ```yaml
 dependencies:
-  recaster:
-    path: ../recaster
+  recaster: ^0.0.1
 ```
 
-Then run:
+### 2. Install
 
 ```bash
 flutter pub get
 ```
+
+### 3. Import
+
+```dart
+import 'package:recaster/recaster.dart';
+```
+
 
 ## API
 
