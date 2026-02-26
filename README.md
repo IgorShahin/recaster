@@ -1,12 +1,7 @@
 <p align="center">
   <img src="docs/assets/logo.png" width="520" alt="Recaster" />
 </p>
-
 <h2 align="center">Desktop App-Window Recorder for Flutter</h2>
-
-<p align="center">
-  Native screen recording plugin for macOS, Windows, and Linux
-</p>
 
 ## Features
 
