@@ -14,7 +14,6 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
   private var resolutionDivisor: Int = 1
   private var outputWidth: Int = 0
   private var outputHeight: Int = 0
-  private var targetWindowId: CGWindowID = 0
   private var currentOutputPath: String?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
@@ -78,7 +77,6 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
       return
     }
 
-    let windowId = CGWindowID(window.windowNumber)
     let requestedFps = max(1, min(60, (args["fps"] as? Int) ?? 30))
     let requestedDivisor = max(1, min(8, (args["resolutionDivisor"] as? Int) ?? 1))
     self.fps = Int32(requestedFps)
@@ -86,11 +84,11 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
     isFinishing = false
     frameIndex = 0
 
-    guard let firstFrame = captureWindowFrame(windowId: windowId) else {
+    guard let firstFrame = captureFlutterViewFrame(window: window) else {
       result(
         FlutterError(
           code: "capture_failed",
-          message: "Unable to capture app window frame. Check screen recording permission.",
+          message: "Unable to capture Flutter view frame.",
           details: nil
         )
       )
@@ -194,7 +192,6 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
       writerInput = input
       pixelBufferAdaptor = adaptor
       currentOutputPath = outputPath
-      targetWindowId = windowId
       outputWidth = width
       outputHeight = height
 
@@ -224,7 +221,16 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
   }
 
   private func captureTick() {
-    guard let frame = captureWindowFrame(windowId: targetWindowId) else {
+    var frame: CGImage?
+    DispatchQueue.main.sync {
+      let window = NSApplication.shared.keyWindow
+        ?? NSApplication.shared.mainWindow
+        ?? NSApplication.shared.windows.first(where: { $0.isVisible })
+      if let window {
+        frame = captureFlutterViewFrame(window: window)
+      }
+    }
+    guard let frame else {
       return
     }
     appendFrame(frame)
@@ -252,13 +258,25 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
     }
   }
 
-  private func captureWindowFrame(windowId: CGWindowID) -> CGImage? {
-    return CGWindowListCreateImage(
-      .null,
-      .optionIncludingWindow,
-      windowId,
-      [.bestResolution, .boundsIgnoreFraming]
-    )
+  private func captureFlutterViewFrame(window: NSWindow) -> CGImage? {
+    guard let contentView = window.contentView else {
+      return nil
+    }
+    let targetView =
+      contentView.subviews.first(where: {
+        String(describing: type(of: $0)).contains("Flutter")
+      }) ?? contentView
+
+    let bounds = targetView.bounds
+    if bounds.width <= 0 || bounds.height <= 0 {
+      return nil
+    }
+
+    guard let bitmap = targetView.bitmapImageRepForCachingDisplay(in: bounds) else {
+      return nil
+    }
+    targetView.cacheDisplay(in: bounds, to: bitmap)
+    return bitmap.cgImage
   }
 
   private func makePixelBuffer(from image: CGImage) -> CVPixelBuffer? {
@@ -314,7 +332,6 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
     assetWriter = nil
     writerInput = nil
     pixelBufferAdaptor = nil
-    targetWindowId = 0
     frameIndex = 0
     fps = 30
     resolutionDivisor = 1

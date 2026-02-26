@@ -1,25 +1,19 @@
 PODS:
-  - file_selector_macos (0.0.1):
-    - FlutterMacOS
   - FlutterMacOS (1.0.0)
   - recaster (0.0.1):
     - FlutterMacOS
 
 DEPENDENCIES:
-  - file_selector_macos (from `Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - recaster (from `Flutter/ephemeral/.symlinks/plugins/recaster/macos`)
 
 EXTERNAL SOURCES:
-  file_selector_macos:
-    :path: Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
   recaster:
     :path: Flutter/ephemeral/.symlinks/plugins/recaster/macos
 
 SPEC CHECKSUMS:
-  file_selector_macos: cc3858c981fe6889f364731200d6232dac1d812d
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   recaster: 309639fba4e3896d070244626ef30f997302ab04
 

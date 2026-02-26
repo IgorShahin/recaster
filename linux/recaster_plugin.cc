@@ -101,6 +101,31 @@ GtkWindow* find_target_window() {
   return nullptr;
 }
 
+GtkWidget* find_flutter_view_widget(GtkWidget* root) {
+  if (root == nullptr) {
+    return nullptr;
+  }
+  const char* type_name = G_OBJECT_TYPE_NAME(root);
+  if (type_name != nullptr && strstr(type_name, "FlView") != nullptr) {
+    return root;
+  }
+  if (!GTK_IS_CONTAINER(root)) {
+    return nullptr;
+  }
+
+  GList* children = gtk_container_get_children(GTK_CONTAINER(root));
+  for (GList* item = children; item != nullptr; item = item->next) {
+    GtkWidget* child = GTK_WIDGET(item->data);
+    GtkWidget* found = find_flutter_view_widget(child);
+    if (found != nullptr) {
+      g_list_free(children);
+      return found;
+    }
+  }
+  g_list_free(children);
+  return nullptr;
+}
+
 bool capture_app_window_frame(FrameData* frame, int resolution_divisor) {
   if (frame == nullptr) {
     return false;
@@ -111,8 +136,10 @@ bool capture_app_window_frame(FrameData* frame, int resolution_divisor) {
     return false;
   }
 
-  GtkWidget* widget = GTK_WIDGET(window);
-  GdkWindow* gdk_window = gtk_widget_get_window(widget);
+  GtkWidget* root_widget = GTK_WIDGET(window);
+  GtkWidget* flutter_view = find_flutter_view_widget(root_widget);
+  GtkWidget* target_widget = flutter_view != nullptr ? flutter_view : root_widget;
+  GdkWindow* gdk_window = gtk_widget_get_window(target_widget);
   if (gdk_window == nullptr) {
     return false;
   }
