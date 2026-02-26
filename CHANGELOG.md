@@ -1,3 +1,8 @@
+## 0.1.1
+
+- Lowered minimum Dart SDK to `>=3.0.0 <4.0.0`.
+- Updated minimum Flutter SDK to `>=3.10.0`.
+
 ## 0.1.0
 
 - Windows output switched to MP4 (Media Foundation).
