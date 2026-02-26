@@ -82,3 +82,43 @@ await recaster.startRecording(
 final recording = await recaster.isRecording();
 final savedPath = await recaster.stopRecording();
 ```
+
+## Important Notes
+
+- Recording target is Flutter view content.
+- Use `.mp4` on macOS and `.avi` on Windows/Linux.
+- On Windows/Linux AVI is uncompressed and can be large.
+- `startRecording` validates output path before capture starts.
+
+## Permissions
+
+### macOS
+
+- First capture may require Screen Recording permission in:
+  - `System Settings -> Privacy & Security -> Screen Recording`
+- If app sandbox is enabled, writing to arbitrary paths may be restricted.
+
+## Path Validation Errors
+
+`startRecording` can return clear platform errors for invalid report paths:
+
+- `invalid_output_path`
+- `directory_create_failed`
+- `path_not_writable`
+
+Use these codes to handle invalid output path configuration in your app.
+
+## Usage Recommendations
+
+- Always pass an absolute `outputPath`.
+- Create unique output file names to avoid overwriting previous recordings.
+- Keep `resolutionDivisor > 1` for long runs to reduce size.
+- Always call `stopRecording()` to finalize the output file.
+
+## Troubleshooting
+
+- `stop_failed` on macOS often means permission/path issues.
+- If file is missing after stop, verify:
+  - final path exists
+  - process has write access
+  - correct extension per platform
