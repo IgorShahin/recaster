@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" width="520" alt="Recaster" />
+  <img src="doc/assets/logo.png" width="520" alt="Recaster" />
 </p>
 <h2 align="center">Desktop App-Window Recorder for Flutter</h2>
 

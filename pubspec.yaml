@@ -1,7 +1,8 @@
 name: recaster
-description: "Plugin recaster"
+description: "Desktop Flutter plugin for recording the current app window on macOS, Windows, and Linux."
 version: 0.0.1
-homepage:
+homepage: https://github.com/IgorShahin/recaster
+repository: https://github.com/IgorShahin/recaster
 
 environment:
   sdk: ^3.6.0
