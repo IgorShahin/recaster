@@ -59,7 +59,7 @@ class _MyAppState extends State<MyApp> {
 
   String _buildDefaultOutputPath() {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final extension = Platform.isMacOS ? 'mp4' : 'avi';
+    final extension = (Platform.isMacOS || Platform.isWindows) ? 'mp4' : 'avi';
     return '${Directory.systemTemp.path}${Platform.pathSeparator}recaster_$now.$extension';
   }
 

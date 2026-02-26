@@ -15,7 +15,7 @@
 | Platform | Backend | Output |
 |---|---|---|
 | macOS | NSView (Flutter view) frame capture + AVAssetWriter (H.264) | `.mp4` |
-| Windows | GDI capture of Flutter native view handle + internal AVI writer | `.avi` |
+| Windows | GDI capture of Flutter native view handle + Media Foundation (H.264) | `.mp4` |
 | Linux | GTK/GDK capture of `FlView` widget (fallback: root window) + internal AVI writer | `.avi` |
 
 ## Get Started
@@ -96,8 +96,7 @@ final savedPath = await recaster.stopRecording();
 ### Windows
 
 - Capture source: Flutter native view handle via GDI.
-- Output format: `.avi` (internal AVI writer).
-- AVI output is uncompressed and can be large.
+- Output format: `.mp4` (H.264, via Media Foundation).
 
 ### Linux
 

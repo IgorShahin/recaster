@@ -47,7 +47,7 @@ class RecasterPlugin : public flutter::Plugin {
   bool EnsureOutputPathWritable(const std::string& output_path,
                                 std::string* error_code,
                                 std::string* error_message);
-  bool WriteAviFile(const std::string& output_path,
+  bool WriteMp4File(const std::string& output_path,
                     const std::vector<FrameData>& frames,
                     int fps,
                     std::string* error_message);

@@ -3,6 +3,10 @@
 #include <windows.h>
 
 #include <VersionHelpers.h>
+#include <mfapi.h>
+#include <mferror.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
 
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
@@ -14,6 +18,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <new>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -25,47 +30,20 @@ namespace recaster {
 
 namespace {
 
-void WriteFourCc(std::ofstream& file, const char* value) {
-  file.write(value, 4);
-}
-
-void WriteU32(std::ofstream& file, uint32_t value) {
-  file.write(reinterpret_cast<const char*>(&value), sizeof(value));
-}
-
-void WriteU16(std::ofstream& file, uint16_t value) {
-  file.write(reinterpret_cast<const char*>(&value), sizeof(value));
-}
-
-uint32_t StreamPosToU32(std::streampos pos) {
-  return static_cast<uint32_t>(static_cast<std::streamoff>(pos));
-}
-
-std::streampos BeginChunk(std::ofstream& file, const char* fourcc) {
-  WriteFourCc(file, fourcc);
-  const std::streampos size_pos = file.tellp();
-  WriteU32(file, 0);
-  return size_pos;
-}
-
-void EndChunk(std::ofstream& file, std::streampos size_pos) {
-  const std::streampos end_pos = file.tellp();
-  uint32_t size = StreamPosToU32(end_pos - (size_pos + std::streamoff(4)));
-  file.seekp(size_pos);
-  WriteU32(file, size);
-  file.seekp(end_pos);
-  if ((size & 1U) != 0U) {
-    const uint8_t pad = 0;
-    file.write(reinterpret_cast<const char*>(&pad), sizeof(pad));
+std::wstring Utf8ToWide(const std::string& input) {
+  if (input.empty()) {
+    return L"";
   }
-}
-
-std::streampos BeginList(std::ofstream& file, const char* list_type) {
-  WriteFourCc(file, "LIST");
-  const std::streampos size_pos = file.tellp();
-  WriteU32(file, 0);
-  WriteFourCc(file, list_type);
-  return size_pos;
+  const int count = MultiByteToWideChar(CP_UTF8, 0, input.c_str(), -1, nullptr, 0);
+  if (count <= 0) {
+    return L"";
+  }
+  std::wstring output(static_cast<size_t>(count), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, input.c_str(), -1, output.data(), count);
+  if (!output.empty() && output.back() == L'\0') {
+    output.pop_back();
+  }
+  return output;
 }
 
 }
@@ -244,7 +222,7 @@ bool RecasterPlugin::EnsureOutputPathWritable(const std::string& output_path,
   return true;
 }
 
-bool RecasterPlugin::WriteAviFile(const std::string& output_path,
+bool RecasterPlugin::WriteMp4File(const std::string& output_path,
                                   const std::vector<FrameData>& frames,
                                   int fps,
                                   std::string* error_message) {
@@ -264,127 +242,191 @@ bool RecasterPlugin::WriteAviFile(const std::string& output_path,
     return false;
   }
 
-  const uint32_t frame_size = static_cast<uint32_t>(
-      static_cast<uint64_t>(width) * static_cast<uint64_t>(height) * 4ULL);
-
-  std::ofstream file(output_path, std::ios::binary | std::ios::trunc);
-  if (!file.is_open()) {
+  const uint32_t frame_size = static_cast<uint32_t>(static_cast<uint64_t>(width) *
+                                                    static_cast<uint64_t>(height) * 4ULL);
+  const std::wstring wide_path = Utf8ToWide(output_path);
+  if (wide_path.empty()) {
     if (error_message != nullptr) {
-      *error_message = "Failed to open output file.";
+      *error_message = "Invalid output path encoding.";
     }
     return false;
   }
 
-  struct IndexEntry {
-    uint32_t offset = 0;
-    uint32_t size = 0;
-  };
-  std::vector<IndexEntry> index_entries;
-  index_entries.reserve(frames.size());
-
-  const std::streampos riff_size_pos = BeginChunk(file, "RIFF");
-  WriteFourCc(file, "AVI ");
-
-  const std::streampos hdrl_size_pos = BeginList(file, "hdrl");
-
-  const std::streampos avih_size_pos = BeginChunk(file, "avih");
-  WriteU32(file, static_cast<uint32_t>(1000000 / std::max(1, fps)));
-  WriteU32(file, frame_size * static_cast<uint32_t>(fps));
-  WriteU32(file, 0);
-  WriteU32(file, 0x10);
-  WriteU32(file, static_cast<uint32_t>(frames.size()));
-  WriteU32(file, 0);
-  WriteU32(file, 1);
-  WriteU32(file, frame_size);
-  WriteU32(file, static_cast<uint32_t>(width));
-  WriteU32(file, static_cast<uint32_t>(height));
-  WriteU32(file, 0);
-  WriteU32(file, 0);
-  WriteU32(file, 0);
-  WriteU32(file, 0);
-  EndChunk(file, avih_size_pos);
-
-  const std::streampos strl_size_pos = BeginList(file, "strl");
-
-  const std::streampos strh_size_pos = BeginChunk(file, "strh");
-  WriteFourCc(file, "vids");
-  WriteFourCc(file, "DIB ");
-  WriteU32(file, 0);
-  WriteU16(file, 0);
-  WriteU16(file, 0);
-  WriteU32(file, 0);
-  WriteU32(file, 1);
-  WriteU32(file, static_cast<uint32_t>(std::max(1, fps)));
-  WriteU32(file, 0);
-  WriteU32(file, static_cast<uint32_t>(frames.size()));
-  WriteU32(file, frame_size);
-  WriteU32(file, 0xFFFFFFFF);
-  WriteU32(file, 0);
-  WriteU16(file, 0);
-  WriteU16(file, 0);
-  WriteU16(file, static_cast<uint16_t>(width));
-  WriteU16(file, static_cast<uint16_t>(height));
-  EndChunk(file, strh_size_pos);
-
-  const std::streampos strf_size_pos = BeginChunk(file, "strf");
-  WriteU32(file, 40);
-  WriteU32(file, static_cast<uint32_t>(width));
-  WriteU32(file, static_cast<uint32_t>(static_cast<int32_t>(-height)));
-  WriteU16(file, 1);
-  WriteU16(file, 32);
-  WriteU32(file, BI_RGB);
-  WriteU32(file, frame_size);
-  WriteU32(file, 0);
-  WriteU32(file, 0);
-  WriteU32(file, 0);
-  WriteU32(file, 0);
-  EndChunk(file, strf_size_pos);
-
-  EndChunk(file, strl_size_pos);
-  EndChunk(file, hdrl_size_pos);
-
-  const std::streampos movi_size_pos = BeginList(file, "movi");
-  const std::streampos movi_data_start = file.tellp();
-
-  for (const FrameData& frame : frames) {
-    if (frame.width != width || frame.height != height ||
-        frame.pixels.size() != frame_size) {
-      continue;
-    }
-
-    const std::streampos chunk_start = file.tellp();
-    const std::streampos frame_size_pos = BeginChunk(file, "00db");
-    file.write(reinterpret_cast<const char*>(frame.pixels.data()),
-               static_cast<std::streamsize>(frame.pixels.size()));
-    EndChunk(file, frame_size_pos);
-
-    IndexEntry entry;
-    entry.offset = StreamPosToU32(chunk_start - movi_data_start);
-    entry.size = static_cast<uint32_t>(frame.pixels.size());
-    index_entries.push_back(entry);
-  }
-
-  EndChunk(file, movi_size_pos);
-
-  const std::streampos idx1_size_pos = BeginChunk(file, "idx1");
-  for (const IndexEntry& entry : index_entries) {
-    WriteFourCc(file, "00db");
-    WriteU32(file, 0x10);
-    WriteU32(file, entry.offset);
-    WriteU32(file, entry.size);
-  }
-  EndChunk(file, idx1_size_pos);
-
-  EndChunk(file, riff_size_pos);
-  file.flush();
-
-  if (!file.good()) {
+  HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
     if (error_message != nullptr) {
-      *error_message = "Failed to finalize AVI output.";
+      *error_message = "Failed to initialize COM.";
     }
     return false;
   }
-  return true;
+  const bool should_uninit_com = SUCCEEDED(hr);
+
+  hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
+  if (FAILED(hr)) {
+    if (should_uninit_com) {
+      CoUninitialize();
+    }
+    if (error_message != nullptr) {
+      *error_message = "Failed to initialize Media Foundation.";
+    }
+    return false;
+  }
+
+  IMFSinkWriter* sink_writer = nullptr;
+  IMFMediaType* output_media_type = nullptr;
+  IMFMediaType* input_media_type = nullptr;
+  DWORD stream_index = 0;
+  bool success = false;
+
+  do {
+    hr = MFCreateSinkWriterFromURL(wide_path.c_str(), nullptr, nullptr, &sink_writer);
+    if (FAILED(hr)) {
+      if (error_message != nullptr) {
+        *error_message = "Failed to create MP4 sink writer.";
+      }
+      break;
+    }
+
+    hr = MFCreateMediaType(&output_media_type);
+    if (FAILED(hr)) {
+      if (error_message != nullptr) {
+        *error_message = "Failed to create output media type.";
+      }
+      break;
+    }
+    output_media_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+    output_media_type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
+    output_media_type->SetUINT32(MF_MT_AVG_BITRATE, 300000);
+    output_media_type->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+    MFSetAttributeSize(output_media_type, MF_MT_FRAME_SIZE, width, height);
+    MFSetAttributeRatio(output_media_type, MF_MT_FRAME_RATE, std::max(1, fps), 1);
+    MFSetAttributeRatio(output_media_type, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+
+    hr = sink_writer->AddStream(output_media_type, &stream_index);
+    if (FAILED(hr)) {
+      if (error_message != nullptr) {
+        *error_message = "Failed to add output stream.";
+      }
+      break;
+    }
+
+    hr = MFCreateMediaType(&input_media_type);
+    if (FAILED(hr)) {
+      if (error_message != nullptr) {
+        *error_message = "Failed to create input media type.";
+      }
+      break;
+    }
+    input_media_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+    input_media_type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+    input_media_type->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+    MFSetAttributeSize(input_media_type, MF_MT_FRAME_SIZE, width, height);
+    MFSetAttributeRatio(input_media_type, MF_MT_FRAME_RATE, std::max(1, fps), 1);
+    MFSetAttributeRatio(input_media_type, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+
+    hr = sink_writer->SetInputMediaType(stream_index, input_media_type, nullptr);
+    if (FAILED(hr)) {
+      if (error_message != nullptr) {
+        *error_message = "Failed to set input media type.";
+      }
+      break;
+    }
+
+    hr = sink_writer->BeginWriting();
+    if (FAILED(hr)) {
+      if (error_message != nullptr) {
+        *error_message = "Failed to start MP4 writing.";
+      }
+      break;
+    }
+
+    const LONGLONG frame_duration = 10 * 1000 * 1000LL / std::max(1, fps);
+    LONGLONG sample_time = 0;
+
+    for (const FrameData& frame : frames) {
+      if (frame.width != width || frame.height != height ||
+          frame.pixels.size() != frame_size) {
+        continue;
+      }
+
+      IMFMediaBuffer* media_buffer = nullptr;
+      IMFSample* sample = nullptr;
+      BYTE* dst = nullptr;
+
+      hr = MFCreateMemoryBuffer(frame_size, &media_buffer);
+      if (FAILED(hr)) {
+        if (error_message != nullptr) {
+          *error_message = "Failed to create frame buffer.";
+        }
+        if (sample != nullptr) sample->Release();
+        if (media_buffer != nullptr) media_buffer->Release();
+        break;
+      }
+
+      hr = media_buffer->Lock(&dst, nullptr, nullptr);
+      if (FAILED(hr)) {
+        if (error_message != nullptr) {
+          *error_message = "Failed to lock frame buffer.";
+        }
+        media_buffer->Release();
+        break;
+      }
+      std::memcpy(dst, frame.pixels.data(), frame_size);
+      media_buffer->Unlock();
+      media_buffer->SetCurrentLength(frame_size);
+
+      hr = MFCreateSample(&sample);
+      if (FAILED(hr)) {
+        if (error_message != nullptr) {
+          *error_message = "Failed to create sample.";
+        }
+        media_buffer->Release();
+        break;
+      }
+
+      sample->AddBuffer(media_buffer);
+      sample->SetSampleTime(sample_time);
+      sample->SetSampleDuration(frame_duration);
+      sample_time += frame_duration;
+
+      hr = sink_writer->WriteSample(stream_index, sample);
+      sample->Release();
+      media_buffer->Release();
+      if (FAILED(hr)) {
+        if (error_message != nullptr) {
+          *error_message = "Failed to encode frame.";
+        }
+        break;
+      }
+    }
+
+    if (SUCCEEDED(hr)) {
+      hr = sink_writer->Finalize();
+      if (FAILED(hr)) {
+        if (error_message != nullptr) {
+          *error_message = "Failed to finalize MP4 output.";
+        }
+        break;
+      }
+      success = true;
+    }
+  } while (false);
+
+  if (input_media_type != nullptr) {
+    input_media_type->Release();
+  }
+  if (output_media_type != nullptr) {
+    output_media_type->Release();
+  }
+  if (sink_writer != nullptr) {
+    sink_writer->Release();
+  }
+
+  MFShutdown();
+  if (should_uninit_com) {
+    CoUninitialize();
+  }
+  return success;
 }
 
 bool RecasterPlugin::StartRecording(const std::string& output_path,
@@ -476,7 +518,7 @@ bool RecasterPlugin::StopRecording(std::string* saved_path,
   }
 
   std::string write_error;
-  const bool ok = WriteAviFile(output_path, captured_frames, fps_, &write_error);
+  const bool ok = WriteMp4File(output_path, captured_frames, fps_, &write_error);
   if (!ok) {
     if (error_message != nullptr) {
       *error_message = write_error;
