@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -198,6 +199,51 @@ void RecasterPlugin::CaptureLoop() {
   }
 }
 
+bool RecasterPlugin::EnsureOutputPathWritable(const std::string& output_path,
+                                              std::string* error_code,
+                                              std::string* error_message) {
+  std::error_code ec;
+  const std::filesystem::path file_path(output_path);
+  const std::filesystem::path dir_path = file_path.parent_path();
+  if (dir_path.empty()) {
+    if (error_code != nullptr) {
+      *error_code = "invalid_output_path";
+    }
+    if (error_message != nullptr) {
+      *error_message = "Output path must include a directory.";
+    }
+    return false;
+  }
+
+  std::filesystem::create_directories(dir_path, ec);
+  if (ec) {
+    if (error_code != nullptr) {
+      *error_code = "directory_create_failed";
+    }
+    if (error_message != nullptr) {
+      *error_message = "Failed to create output directory.";
+    }
+    return false;
+  }
+
+  const std::filesystem::path probe_path =
+      dir_path / std::filesystem::path(".recaster_write_probe.tmp");
+  std::ofstream probe_file(probe_path.string(),
+                           std::ios::binary | std::ios::trunc);
+  if (!probe_file.is_open()) {
+    if (error_code != nullptr) {
+      *error_code = "path_not_writable";
+    }
+    if (error_message != nullptr) {
+      *error_message = "Output directory is not writable.";
+    }
+    return false;
+  }
+  probe_file.close();
+  std::filesystem::remove(probe_path, ec);
+  return true;
+}
+
 bool RecasterPlugin::WriteAviFile(const std::string& output_path,
                                   const std::vector<FrameData>& frames,
                                   int fps,
@@ -344,22 +390,35 @@ bool RecasterPlugin::WriteAviFile(const std::string& output_path,
 bool RecasterPlugin::StartRecording(const std::string& output_path,
                                     int fps,
                                     int resolution_divisor,
+                                    std::string* error_code,
                                     std::string* error_message) {
   if (is_recording_.load()) {
     if (error_message != nullptr) {
       *error_message = "Screen recording is already running.";
     }
+    if (error_code != nullptr) {
+      *error_code = "already_recording";
+    }
     return false;
   }
   if (native_window_handle_ == nullptr) {
+    if (error_code != nullptr) {
+      *error_code = "window_handle_unavailable";
+    }
     if (error_message != nullptr) {
       *error_message = "Native window handle is unavailable.";
     }
     return false;
   }
+  if (!EnsureOutputPathWritable(output_path, error_code, error_message)) {
+    return false;
+  }
   const HWND hwnd = static_cast<HWND>(native_window_handle_);
   RECT rect = {};
   if (!GetClientRect(hwnd, &rect)) {
+    if (error_code != nullptr) {
+      *error_code = "window_size_failed";
+    }
     if (error_message != nullptr) {
       *error_message = "Failed to read window size.";
     }
@@ -368,6 +427,9 @@ bool RecasterPlugin::StartRecording(const std::string& output_path,
   const int source_width = rect.right - rect.left;
   const int source_height = rect.bottom - rect.top;
   if (source_width <= 0 || source_height <= 0) {
+    if (error_code != nullptr) {
+      *error_code = "window_size_invalid";
+    }
     if (error_message != nullptr) {
       *error_message = "Window has invalid size.";
     }
@@ -485,9 +547,12 @@ void RecasterPlugin::HandleMethodCall(
       }
     }
 
+    std::string error_code;
     std::string error_message;
-    if (!StartRecording(*output_path, fps, resolution_divisor, &error_message)) {
-      result->Error("start_failed", error_message);
+    if (!StartRecording(*output_path, fps, resolution_divisor, &error_code,
+                        &error_message)) {
+      result->Error(error_code.empty() ? "start_failed" : error_code,
+                    error_message);
       return;
     }
     result->Success(flutter::EncodableValue());

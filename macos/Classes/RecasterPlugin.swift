@@ -3,10 +3,12 @@ import AVFoundation
 import FlutterMacOS
 
 public class RecasterPlugin: NSObject, FlutterPlugin {
+  private let captureQueue = DispatchQueue(label: "recaster.capture.queue")
   private var assetWriter: AVAssetWriter?
   private var writerInput: AVAssetWriterInput?
   private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
   private var captureTimer: DispatchSourceTimer?
+  private var isFinishing: Bool = false
   private var frameIndex: Int64 = 0
   private var fps: Int32 = 30
   private var resolutionDivisor: Int = 1
@@ -81,6 +83,7 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
     let requestedDivisor = max(1, min(8, (args["resolutionDivisor"] as? Int) ?? 1))
     self.fps = Int32(requestedFps)
     self.resolutionDivisor = requestedDivisor
+    isFinishing = false
     frameIndex = 0
 
     guard let firstFrame = captureWindowFrame(windowId: windowId) else {
@@ -114,6 +117,32 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
     }
 
     let outputURL = URL(fileURLWithPath: outputPath)
+    let outputDir = outputURL.deletingLastPathComponent()
+    do {
+      try FileManager.default.createDirectory(
+        at: outputDir,
+        withIntermediateDirectories: true
+      )
+    } catch {
+      result(
+        FlutterError(
+          code: "invalid_output_path",
+          message: "Failed to create output directory.",
+          details: error.localizedDescription
+        )
+      )
+      return
+    }
+    if !FileManager.default.isWritableFile(atPath: outputDir.path) {
+      result(
+        FlutterError(
+          code: "path_not_writable",
+          message: "Output directory is not writable.",
+          details: outputDir.path
+        )
+      )
+      return
+    }
     try? FileManager.default.removeItem(at: outputURL)
 
     do {
@@ -149,7 +178,16 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
       }
 
       writer.add(input)
-      writer.startWriting()
+      guard writer.startWriting() else {
+        result(
+          FlutterError(
+            code: "start_failed",
+            message: "Failed to start asset writer.",
+            details: writer.error?.localizedDescription
+          )
+        )
+        return
+      }
       writer.startSession(atSourceTime: .zero)
 
       assetWriter = writer
@@ -175,7 +213,7 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
   }
 
   private func startCaptureTimer() {
-    let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+    let timer = DispatchSource.makeTimerSource(queue: captureQueue)
     let interval = DispatchTimeInterval.milliseconds(max(1, 1000 / Int(fps)))
     timer.schedule(deadline: .now() + interval, repeating: interval)
     timer.setEventHandler { [weak self] in
@@ -194,6 +232,7 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
 
   private func appendFrame(_ frame: CGImage) {
     guard
+      !isFinishing,
       let input = writerInput,
       let adaptor = pixelBufferAdaptor,
       let writer = assetWriter,
@@ -271,6 +310,7 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
   private func resetRecorderState() {
     captureTimer?.cancel()
     captureTimer = nil
+    isFinishing = false
     assetWriter = nil
     writerInput = nil
     pixelBufferAdaptor = nil
@@ -288,29 +328,35 @@ public class RecasterPlugin: NSObject, FlutterPlugin {
       return
     }
 
-    captureTimer?.cancel()
-    captureTimer = nil
     let outputPath = currentOutputPath
     currentOutputPath = nil
-    input.markAsFinished()
 
-    writer.finishWriting { [weak self] in
-      DispatchQueue.main.async {
-        if writer.status == .completed {
-          self?.resetRecorderState()
-          result(outputPath)
-          return
-        }
+    captureQueue.async { [weak self] in
+      guard let self = self else { return }
+      self.isFinishing = true
+      self.captureTimer?.setEventHandler {}
+      self.captureTimer?.cancel()
+      self.captureTimer = nil
+      input.markAsFinished()
 
-        let details = writer.error?.localizedDescription ?? "Unknown writer error."
-        self?.resetRecorderState()
-        result(
-          FlutterError(
-            code: "stop_failed",
-            message: "Failed to finalize recording file.",
-            details: details
+      writer.finishWriting {
+        DispatchQueue.main.async {
+          if writer.status == .completed {
+            self.resetRecorderState()
+            result(outputPath)
+            return
+          }
+
+          let details = writer.error?.localizedDescription ?? "Unknown writer error."
+          self.resetRecorderState()
+          result(
+            FlutterError(
+              code: "stop_failed",
+              message: "Failed to finalize recording file.",
+              details: details
+            )
           )
-        )
+        }
       }
     }
   }

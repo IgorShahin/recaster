@@ -8,7 +8,9 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <glib/gstdio.h>
 #include <string>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -362,6 +364,24 @@ FlMethodResponse* start_recording(RecasterPlugin* self, FlMethodCall* method_cal
     return FL_METHOD_RESPONSE(fl_method_error_response_new(
         "invalid_args", "outputPath is required.", nullptr));
   }
+  g_autofree gchar* output_dir = g_path_get_dirname(output_path);
+  if (output_dir == nullptr || strlen(output_dir) == 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        "invalid_output_path", "Output path must include a directory.", nullptr));
+  }
+  if (g_mkdir_with_parents(output_dir, 0755) != 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        "directory_create_failed", "Failed to create output directory.", nullptr));
+  }
+  g_autofree gchar* probe_template =
+      g_strdup_printf("%s/.recaster_write_probe_XXXXXX", output_dir);
+  const gint probe_fd = g_mkstemp(probe_template);
+  if (probe_fd < 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        "path_not_writable", "Output directory is not writable.", nullptr));
+  }
+  close(probe_fd);
+  g_remove(probe_template);
 
   int fps = 30;
   int resolution_divisor = 1;

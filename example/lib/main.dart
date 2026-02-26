@@ -60,7 +60,7 @@ class _MyAppState extends State<MyApp> {
   String _buildDefaultOutputPath() {
     final now = DateTime.now().millisecondsSinceEpoch;
     final extension = Platform.isMacOS ? 'mp4' : 'avi';
-    return '${Directory.systemTemp.path}/recaster_$now.$extension';
+    return '${Directory.systemTemp.path}${Platform.pathSeparator}recaster_$now.$extension';
   }
 
   Future<void> _refreshStatus() async {
@@ -97,7 +97,10 @@ class _MyAppState extends State<MyApp> {
     } on PlatformException catch (e) {
       if (!mounted) return;
       setState(() {
-        _status = 'Start error: ${e.message ?? e.code}';
+        final details = e.details?.toString();
+        _status = details == null || details.isEmpty
+            ? 'Start error: ${e.message ?? e.code}'
+            : 'Start error: ${e.message ?? e.code} ($details)';
       });
     }
   }
@@ -105,9 +108,12 @@ class _MyAppState extends State<MyApp> {
   Future<void> _stopRecording() async {
     try {
       final path = await _recasterPlugin.stopRecording();
+      final exists = path != null && File(path).existsSync();
       if (!mounted) return;
       setState(() {
-        _status = 'Idle';
+        _status = exists
+            ? 'Idle'
+            : 'Stop warning: file was not found on disk';
         _lastSaved = path ?? '';
         _outputPath = _buildDefaultOutputPath();
         _pathController.text = _outputPath;
@@ -115,7 +121,10 @@ class _MyAppState extends State<MyApp> {
     } on PlatformException catch (e) {
       if (!mounted) return;
       setState(() {
-        _status = 'Stop error: ${e.message ?? e.code}';
+        final details = e.details?.toString();
+        _status = details == null || details.isEmpty
+            ? 'Stop error: ${e.message ?? e.code}'
+            : 'Stop error: ${e.message ?? e.code} ($details)';
       });
     }
   }
