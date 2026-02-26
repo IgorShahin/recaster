@@ -5,4 +5,3 @@
 - Added Windows internal app-window recording implementation (AVI output).
 - Added Linux internal app-window recording implementation (AVI output).
 - Added `resolutionDivisor` in `startRecording` to reduce output resolution.
-- Updated tests and README with new usage.
