@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:recaster/recaster.dart';
 
@@ -17,29 +18,38 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   String _platformVersion = 'Unknown';
+  String _status = 'Idle';
+  String _outputPath = '';
+  String _lastSaved = '';
   final _recasterPlugin = Recaster();
+  final _fpsController = TextEditingController(text: '30');
+  final _resolutionDivisorController = TextEditingController(text: '1');
+  final _pathController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     initPlatformState();
+    _outputPath = _buildDefaultOutputPath();
+    _pathController.text = _outputPath;
   }
 
-  // Platform messages are asynchronous, so we initialize in an async method.
+  @override
+  void dispose() {
+    _fpsController.dispose();
+    _resolutionDivisorController.dispose();
+    _pathController.dispose();
+    super.dispose();
+  }
+
   Future<void> initPlatformState() async {
     String platformVersion;
-    // Platform messages may fail, so we use a try/catch PlatformException.
-    // We also handle the message potentially returning null.
     try {
-      platformVersion =
-          await _recasterPlugin.getPlatformVersion() ?? 'Unknown platform version';
+      platformVersion = await _recasterPlugin.getPlatformVersion() ?? 'Unknown platform version';
     } on PlatformException {
       platformVersion = 'Failed to get platform version.';
     }
 
-    // If the widget was removed from the tree while the asynchronous platform
-    // message was in flight, we want to discard the reply rather than calling
-    // setState to update our non-existent appearance.
     if (!mounted) return;
 
     setState(() {
@@ -47,15 +57,137 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  String _buildDefaultOutputPath() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final extension = Platform.isMacOS ? 'mp4' : 'avi';
+    return '${Directory.systemTemp.path}/recaster_$now.$extension';
+  }
+
+  Future<void> _refreshStatus() async {
+    try {
+      final recording = await _recasterPlugin.isRecording();
+      if (!mounted) return;
+      setState(() {
+        _status = recording ? 'Recording' : 'Idle';
+      });
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = 'Status error: ${e.message ?? e.code}';
+      });
+    }
+  }
+
+  Future<void> _startRecording() async {
+    final parsedFps = int.tryParse(_fpsController.text.trim()) ?? 30;
+    final fps = parsedFps <= 0 ? 30 : parsedFps;
+    final parsedDivisor = int.tryParse(_resolutionDivisorController.text.trim()) ?? 1;
+    final resolutionDivisor = parsedDivisor <= 0 ? 1 : parsedDivisor;
+    try {
+      await _recasterPlugin.startRecording(
+        outputPath: _outputPath,
+        fps: fps,
+        resolutionDivisor: resolutionDivisor,
+      );
+      if (!mounted) return;
+      setState(() {
+        _status = 'Recording';
+        _lastSaved = '';
+      });
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = 'Start error: ${e.message ?? e.code}';
+      });
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      final path = await _recasterPlugin.stopRecording();
+      if (!mounted) return;
+      setState(() {
+        _status = 'Idle';
+        _lastSaved = path ?? '';
+        _outputPath = _buildDefaultOutputPath();
+        _pathController.text = _outputPath;
+      });
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = 'Stop error: ${e.message ?? e.code}';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Plugin example app'),
+          title: const Text('Recaster Example'),
         ),
-        body: Center(
-          child: Text('Running on: $_platformVersion\n'),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Running on: $_platformVersion'),
+              const SizedBox(height: 12),
+              Text('Status: $_status'),
+              const SizedBox(height: 12),
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Output file path',
+                  border: OutlineInputBorder(),
+                ),
+                controller: _pathController,
+                onChanged: (value) {
+                  _outputPath = value;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _fpsController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'FPS',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _resolutionDivisorController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Resolution divisor (1=full, 2=half)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ElevatedButton(
+                    onPressed: _startRecording,
+                    child: const Text('Start'),
+                  ),
+                  ElevatedButton(
+                    onPressed: _stopRecording,
+                    child: const Text('Stop'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _refreshStatus,
+                    child: const Text('Status'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text('Next output: $_outputPath'),
+              if (_lastSaved.isNotEmpty) Text('Saved: $_lastSaved'),
+            ],
+          ),
         ),
       ),
     );

@@ -23,4 +23,4 @@ FLUTTER_PLUGIN_EXPORT void recaster_plugin_register_with_registrar(
 
 G_END_DECLS
 
-#endif  // FLUTTER_PLUGIN_RECASTER_PLUGIN_H_
+#endif
